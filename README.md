@@ -101,3 +101,16 @@ commit and redeploy, or rebuild from a previous tag:
 git revert <commit>          # revert a bad release
 docker compose up -d --build # redeploy the reverted version
 ```
+
+## Cloud Mapping (Local to GCP / Production)
+
+The local pipeline maps directly to production cloud architecture on Google Cloud Platform (GCP):
+
+| Stage | Local Flow | GCP Cloud Equivalent | Implementation & Architecture |
+|---|---|---|---|
+| **1. Commit & CI** | Git push triggers GitHub Actions workflow (`ci.yml`), running Node.js unit tests (`npm test`). | **GitHub Actions + GCP Workload Identity Federation** | On push, GitHub Actions authenticates with GCP, runs unit tests, and builds the container image. |
+| **2. Container Registry** | Docker image built locally (`ci-container-monitoring-lab:ci`). | **Artifact Registry** | Image is built, tagged with Git commit SHA (`gcr.io/$PROJECT_ID/app:$COMMIT_SHA`), and pushed to GCP Artifact Registry. |
+| **3. Container Deployment** | `docker compose up -d` deploys service container with environment variables (`MAINTENANCE_MODE=off`). | **Google Cloud Run** | Cloud Run deploys the container from Artifact Registry, managing scaling, TLS termination, and health check probes targeting `/health`. |
+| **4. Monitoring & Alerting** | Prometheus scrapes `/metrics` endpoint; Grafana visualizes request rate and latency. | **Cloud Monitoring + Managed Service for Prometheus** | Cloud Monitoring ingests container logs and Prometheus metrics endpoints via Google Cloud Managed Service for Prometheus, driving Cloud Monitoring dashboards & uptime alerts. |
+| **5. Instant Rollback** | `git revert <commit>` & `docker compose up -d --build` rebuilds and redeploys prior working state. | **Cloud Run Revision Traffic Splitting** | Cloud Run maintains immutable revisions per deployment. A bad release is rolled back instantly in seconds via `gcloud run services update-traffic app --to-revisions=PREVIOUS_REVISION=100`. |
+
